@@ -9,6 +9,7 @@ import Keyv from 'keyv';
 import { createKeyv } from '@keyv/redis';
 import { CacheableMemory } from 'cacheable';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { PostsModule } from './posts/posts.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     }),
     UsersModule,
     AuthModule,
+    PostsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
