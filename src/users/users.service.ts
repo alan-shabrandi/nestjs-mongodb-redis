@@ -13,7 +13,7 @@ export class UsersService {
     email: string,
     password: string,
   ): Promise<User> {
-    const existingUser = await this.userModel.findOne({ email });
+    const existingUser = await this.findByEmail(email);
     if (existingUser) throw new BadRequestException('Email already exist');
 
     const salt = await bcrypt.genSalt(10);
@@ -24,5 +24,13 @@ export class UsersService {
       password: hashedPassword,
     });
     return newUser.save();
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userModel.findOne({ email }).exec();
+  }
+
+  async findById(userId: string): Promise<User | null> {
+    return this.userModel.findById(userId);
   }
 }
