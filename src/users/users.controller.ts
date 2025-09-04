@@ -16,6 +16,7 @@ import { RolesGuard } from 'src/auth/roles.guard';
 import { Roles } from 'src/auth/roles.decorator';
 import { RolesOwnerGuard } from 'src/auth/roles-owner.guard';
 import { RolesOwner } from 'src/auth/roles-owner.decorator';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('users')
 export class UsersController {
@@ -38,6 +39,7 @@ export class UsersController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.ADMIN)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Get()
   async findAll() {
     return this.usersService.findAll();

@@ -9,6 +9,7 @@ import {
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
@@ -17,6 +18,8 @@ export class AuthController {
     private jwtService: JwtService,
   ) {}
 
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('login')
   async login(@Body() body: { email: string; password: string }) {
     const user = await this.authService.validationUser(
