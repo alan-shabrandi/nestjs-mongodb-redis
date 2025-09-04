@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { Model } from 'mongoose';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -12,7 +13,16 @@ export class UsersService {
     email: string,
     password: string,
   ): Promise<User> {
-    const newUser = new this.userModel({ name, email, password });
+    const existingUser = await this.userModel.findOne({ email });
+    if (existingUser) throw new BadRequestException('Email already exist');
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    const newUser = new this.userModel({
+      name,
+      email,
+      password: hashedPassword,
+    });
     return newUser.save();
   }
 }
