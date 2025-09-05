@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
 
 export enum UserRole {
   USER = 'user',
@@ -22,4 +23,4 @@ export class User {
 
 export type UserDocument = User & Document;
 export const UserSchema = SchemaFactory.createForClass(User);
-UserSchema.index({ email: 1 });
+UserSchema.index({ email: 1 }, { unique: true });

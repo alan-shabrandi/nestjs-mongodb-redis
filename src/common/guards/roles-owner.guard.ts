@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_OWNER_KEY } from './roles-owner.decorator';
+import { ROLES_OWNER_KEY } from '../decorators/roles-owner.decorator';
 
 @Injectable()
 export class RolesOwnerGuard implements CanActivate {

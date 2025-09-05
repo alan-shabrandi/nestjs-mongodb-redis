@@ -11,37 +11,61 @@ import { CacheableMemory } from 'cacheable';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { PostsModule } from './posts/posts.module';
 import { CommentsModule } from './comments/comments.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+import databaseConfig from './config/database.config';
+import cacheConfig from './config/cache.config';
+import throttlerConfig from './config/throttler.config';
+import authConfig from './config/auth.config';
+import { AppConfigService } from './config/app-config.service';
 
 @Module({
   imports: [
-    MongooseModule.forRoot('mongodb://localhost:27017/ecommerce'),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [databaseConfig, cacheConfig, throttlerConfig, authConfig],
+    }),
+    MongooseModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        uri: config.get<string>('database.uri'),
+      }),
+    }),
     CacheModule.registerAsync({
       isGlobal: true,
-      useFactory: async () => {
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => {
         return {
           stores: [
             new Keyv({
-              store: new CacheableMemory({ ttl: 60000, lruSize: 5000 }),
+              store: new CacheableMemory({
+                ttl: config.get<number>('cache.ttl'),
+                lruSize: config.get<number>('cache.size'),
+              }),
             }),
-            createKeyv('redis://localhost:6382'),
+            createKeyv(config.get<string>('cache.redisUri')),
           ],
         };
       },
     }),
-    ThrottlerModule.forRoot({
-      throttlers: [
-        {
-          ttl: 60000,
-          limit: 10,
-        },
-      ],
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            ttl: config.get<number>('throttler.ttl') ?? 60000,
+            limit: config.get<number>('throttler.limit') ?? 10,
+          },
+        ],
+      }),
     }),
+
     UsersModule,
     AuthModule,
     PostsModule,
-    CommentsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, AppConfigService],
+  exports: [AppConfigService],
 })
 export class AppModule {}

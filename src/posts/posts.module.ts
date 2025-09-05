@@ -1,9 +1,22 @@
 import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { Post, PostSchema } from './schemas/post.schema';
 import { PostsService } from './posts.service';
-import { PostsController } from './posts.controller';
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { APP_GUARD } from '@nestjs/core';
+import { PublicPostsController } from './posts.public.controller';
+import { ProtectedPostsController } from './posts.protected.controller';
+import { AppConfigService } from 'src/config/app-config.service';
 
 @Module({
-  controllers: [PostsController],
-  providers: [PostsService],
+  imports: [
+    MongooseModule.forFeature([{ name: Post.name, schema: PostSchema }]),
+  ],
+  providers: [
+    PostsService,
+    AppConfigService,
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
+  controllers: [PublicPostsController, ProtectedPostsController],
 })
 export class PostsModule {}

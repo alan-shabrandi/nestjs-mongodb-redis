@@ -1,49 +1,92 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 import { Post, PostDocument } from './schemas/post.schema';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
-import { Model } from 'mongoose';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { RedisClientType } from 'redis';
+import { AppConfigService } from 'src/config/app-config.service';
 
 @Injectable()
 export class PostsService {
+  private readonly ALL_POSTS_CACHE_KEY = 'posts:all';
+
   constructor(
-    @InjectModel(Post.name) private postModel: Model<PostDocument>,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: any,
+    private readonly appConfigService: AppConfigService,
   ) {}
 
-  async createPost(userId: string, dto: CreatePostDto) {
-    const post = new this.postModel({ ...dto, author: userId });
+  private get redisClient(): RedisClientType {
+    return this.cacheManager.store.getClient();
+  }
+
+  private getPostCacheKey(id: string) {
+    return `posts:${id}`;
+  }
+
+  async createPost(userId: string, dto: CreatePostDto): Promise<PostDocument> {
+    const post = new this.postModel({
+      ...dto,
+      author: new Types.ObjectId(userId),
+    });
     const saved = await post.save();
-    await this.cacheManager.del('posts:all');
+
+    const cacheKey = this.getPostCacheKey(saved._id.toString());
+    await this.redisClient.set(cacheKey, JSON.stringify(saved), {
+      EX: this.appConfigService.cacheTtl,
+    });
+    await this.redisClient.del(this.ALL_POSTS_CACHE_KEY);
+
     return saved;
   }
 
-  async findAll() {
-    const cacheKey = 'posts:all';
-    const cached = await this.cacheManager.get<Post[]>(cacheKey);
-    if (cached) return cached;
+  async findAll(): Promise<Post[]> {
+    const cached = await this.redisClient.get(this.ALL_POSTS_CACHE_KEY);
+    if (cached) return JSON.parse(cached);
 
     const posts = await this.postModel
       .find()
       .populate('author', 'name email')
       .exec();
-    await this.cacheManager.set(cacheKey, posts, 60000);
+    await this.redisClient.set(
+      this.ALL_POSTS_CACHE_KEY,
+      JSON.stringify(posts),
+      { EX: this.appConfigService.cacheTtl },
+    );
+
+    const pipeline = this.redisClient.multi();
+    posts.forEach((p) =>
+      pipeline.set(this.getPostCacheKey(p._id.toString()), JSON.stringify(p), {
+        EX: this.appConfigService.cacheTtl,
+      }),
+    );
+    await pipeline.exec();
+
+    return posts;
   }
 
-  async findById(id: string) {
-    const cacheKey = `posts:${id}`;
-    const cached = await this.cacheManager.get<Post>(cacheKey);
-    if (cached) return cached;
+  async findById(id: string): Promise<PostDocument> {
+    const cacheKey = this.getPostCacheKey(id);
+    const cached = await this.redisClient.get(cacheKey);
+    if (cached) return JSON.parse(cached);
 
     const post = await this.postModel
       .findById(id)
       .populate('author', 'name email')
       .exec();
     if (!post) throw new NotFoundException('Post not found');
-    await this.cacheManager.set(cacheKey, post, 60000);
+
+    await this.redisClient.set(cacheKey, JSON.stringify(post), {
+      EX: this.appConfigService.cacheTtl,
+    });
+    return post;
   }
 
   async updatePost(
@@ -51,18 +94,21 @@ export class PostsService {
     userId: string,
     dto: UpdatePostDto,
     userRole: string,
-  ) {
+  ): Promise<PostDocument> {
     const post = await this.postModel.findById(id).exec();
     if (!post) throw new NotFoundException('Post not found');
-
     if (post.author.toString() !== userId && userRole !== 'admin')
-      throw new Error('Access Denied');
+      throw new ForbiddenException('Access Denied');
 
     Object.assign(post, dto);
     const updated = await post.save();
 
-    await this.cacheManager.del(`posts:${id}`);
-    await this.cacheManager.del('posts:all');
+    await this.redisClient.set(
+      this.getPostCacheKey(updated._id.toString()),
+      JSON.stringify(updated),
+      { EX: this.appConfigService.cacheTtl },
+    );
+    await this.redisClient.del(this.ALL_POSTS_CACHE_KEY);
 
     return updated;
   }
@@ -70,13 +116,13 @@ export class PostsService {
   async deletePost(id: string, userId: string, userRole: string) {
     const post = await this.postModel.findById(id).exec();
     if (!post) throw new NotFoundException('Post not found');
-
     if (post.author.toString() !== userId && userRole !== 'admin')
-      throw new Error('Access Denied');
+      throw new ForbiddenException('Access Denied');
 
     await this.postModel.deleteOne({ _id: id }).exec();
-    await this.cacheManager.del(`posts:${id}`);
-    await this.cacheManager.del('posts:all');
+    await this.redisClient.del(this.getPostCacheKey(id));
+    await this.redisClient.del(this.ALL_POSTS_CACHE_KEY);
+
     return { message: 'Post deleted' };
   }
 }
