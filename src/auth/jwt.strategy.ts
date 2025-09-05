@@ -18,12 +18,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly configService: ConfigService,
   ) {
     const authConfig = configService.get('auth');
-    if (!authConfig?.jwtSecret) throw new Error('JWT_SECRET is not defined');
+    if (!authConfig?.jwtAccessSecret)
+      throw new Error('JWT_ACCESS_SECRET is not defined');
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: authConfig.jwtSecret,
+      secretOrKey: authConfig.jwtAccessSecret, // <-- اصلاح شده
     });
   }
 
