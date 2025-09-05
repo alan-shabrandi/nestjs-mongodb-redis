@@ -125,4 +125,15 @@ export class PostsService {
 
     return { message: 'Post deleted' };
   }
+
+  async searchPosts(term: string, page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+    const results = await this.postModel
+      .find({ $text: { $search: term } }, { score: { $meta: 'textScore' } })
+      .sort({ score: { $meta: 'textScore' } })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+    return results;
+  }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { ApiTags, ApiOkResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { Post as PostEntity } from './schemas/post.schema';
@@ -19,5 +19,10 @@ export class PublicPostsController {
   @ApiNotFoundResponse({ description: 'Post not found' })
   async findById(@Param('id') id: string) {
     return this.postsService.findById(id);
+  }
+
+  @Get('search')
+  async search(@Query('q') q: string, @Query('page') page = 1) {
+    return this.postsService.searchPosts(q, Number(page));
   }
 }

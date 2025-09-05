@@ -18,6 +18,7 @@ import cacheConfig from './config/cache.config';
 import throttlerConfig from './config/throttler.config';
 import authConfig from './config/auth.config';
 import { AppConfigService } from './config/app-config.service';
+import { NotificationModule } from './notification/notifications.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AppConfigService } from './config/app-config.service';
     UsersModule,
     AuthModule,
     PostsModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppConfigService],

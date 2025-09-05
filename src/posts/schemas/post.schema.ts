@@ -27,3 +27,5 @@ export class Post {
 
 export type PostDocument = Post & Document & { _id: Types.ObjectId };
 export const PostSchema = SchemaFactory.createForClass(Post);
+
+PostSchema.index({ title: 'text', content: 'text' });

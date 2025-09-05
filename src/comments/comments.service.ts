@@ -1,12 +1,13 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Comment, CommentDocument } from './schemas/comment.schema';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Post, PostDocument } from 'src/posts/schemas/post.schema';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { NotificationsGateway } from 'src/notification/notifications.gateway';
 
 @Injectable()
 export class CommentsService {
@@ -14,6 +15,7 @@ export class CommentsService {
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
     @InjectModel(Post.name) private postModel: Model<PostDocument>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   async createComment(userId: string, dto: CreateCommentDto) {
@@ -26,7 +28,17 @@ export class CommentsService {
       post: dto.postId,
     });
 
-    const saved = comment.save();
+    const saved = await comment.save();
+
+    if (post.author._id.toString() !== userId) {
+      const message = `New comment on your post: ${dto.text}`;
+      this.notificationsGateway.sendNotification(
+        post.author._id.toString(),
+        'comment',
+        message,
+        (saved._id as Types.ObjectId).toString(),
+      );
+    }
 
     await this.cacheManager.del(`posts:${dto.postId}`);
     return saved;
