@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { UserDocument } from 'src/users/schemas/user.schema';
 import { Types } from 'mongoose';
 
-interface JwtPayload {
+export interface JwtPayload {
   sub: string;
   email?: string;
 }
@@ -24,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: authConfig.jwtAccessSecret, // <-- اصلاح شده
+      secretOrKey: authConfig.jwtAccessSecret,
     });
   }
 

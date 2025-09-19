@@ -3,6 +3,7 @@ import {
   Controller,
   Post,
   Request,
+  Res,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -11,8 +12,6 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { LoginDto } from './dto/login.dto';
-import { RefreshDto } from './dto/refresh.dto';
-import { TokenResponseDto } from './dto/token-response.dto';
 import {
   ApiTags,
   ApiOperation,
@@ -20,14 +19,10 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
-
-interface JwtPayload {
-  sub: string;
-  email?: string;
-}
+import type { Response } from 'express';
 
 const THROTTLE_LIMIT = Number(process.env.THROTTLE_LIMIT) || 3;
-const THROTTLE_TTL = Number(process.env.THROTTLE_TTL) || 60;
+const THROTTLE_TTL = Number(process.env.THROTTLE_TTL) || 60000;
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -42,33 +37,46 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: 'User login' })
   @ApiBody({ type: LoginDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Successfully logged in',
-    type: TokenResponseDto,
-  })
+  @ApiResponse({ status: 201, description: 'Successfully logged in' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() body: LoginDto): Promise<TokenResponseDto> {
+  async login(
+    @Body() body: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ access_token: string }> {
     const user = await this.authService.validateUser(body.email, body.password);
-    return this.authService.login(user);
+    const tokens = await this.authService.login(user);
+
+    res.cookie('refresh_token', tokens.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+    });
+
+    return { access_token: tokens.access_token };
   }
 
   @Post('refresh')
+  @Throttle({ default: { limit: THROTTLE_LIMIT, ttl: THROTTLE_TTL } })
   @ApiOperation({ summary: 'Refresh access token' })
-  @ApiBody({ type: RefreshDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Tokens refreshed',
-    type: TokenResponseDto,
-  })
+  @ApiResponse({ status: 200, description: 'Tokens refreshed' })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refresh(@Body() body: RefreshDto): Promise<TokenResponseDto> {
-    try {
-      const payload = this.jwtService.verify<JwtPayload>(body.refresh_token);
-      return this.authService.refresh(payload.sub, body.refresh_token);
-    } catch (error) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+  async refresh(
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ access_token: string }> {
+    const refreshToken = res.req.cookies['refresh_token'];
+    if (!refreshToken) throw new UnauthorizedException('No refresh token');
+
+    const payload = this.authService.verifyRefreshToken(refreshToken);
+    const tokens = await this.authService.refresh(payload.sub, refreshToken);
+    res.cookie('refresh_token', tokens.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+    });
+
+    return { access_token: tokens.access_token };
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -77,7 +85,12 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async logout(@Request() req: { user: { userId: string } }) {
-    return this.authService.logout(req.user.userId);
+  async logout(
+    @Request() req: { user: { userId: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.authService.logout(req.user.userId);
+    res.clearCookie('refresh_token');
+    return { message: 'Logged out successfully' };
   }
 }

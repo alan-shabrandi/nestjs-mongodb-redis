@@ -8,9 +8,8 @@ import { CacheModule } from '@nestjs/cache-manager';
 import Keyv from 'keyv';
 import { createKeyv } from '@keyv/redis';
 import { CacheableMemory } from 'cacheable';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PostsModule } from './posts/posts.module';
-import { CommentsModule } from './comments/comments.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 import databaseConfig from './config/database.config';
@@ -19,6 +18,7 @@ import throttlerConfig from './config/throttler.config';
 import authConfig from './config/auth.config';
 import { AppConfigService } from './config/app-config.service';
 import { NotificationModule } from './notification/notifications.module';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -67,7 +67,11 @@ import { NotificationModule } from './notification/notifications.module';
     NotificationModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AppConfigService],
+  providers: [
+    AppService,
+    AppConfigService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
   exports: [AppConfigService],
 })
 export class AppModule {}
