@@ -27,6 +27,7 @@ import {
 import { UserDto } from './dto/user.dto';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
+import { plainToInstance } from 'class-transformer';
 
 const THROTTLE_LIMIT = Number(process.env.THROTTLE_LIMIT) || 3;
 const THROTTLE_TTL = Number(process.env.THROTTLE_TTL) || 60;
@@ -61,7 +62,8 @@ export class UsersController {
     type: UserDto,
   })
   async getProfile(@Request() req) {
-    return this.usersService.findById(req.user.userId);
+    const user = await this.usersService.findById(req.user.userId);
+    return plainToInstance(UserDto, user, { excludeExtraneousValues: true });
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)

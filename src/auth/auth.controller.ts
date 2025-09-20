@@ -21,16 +21,13 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 
-const THROTTLE_LIMIT = Number(process.env.THROTTLE_LIMIT) || 3;
+const THROTTLE_LIMIT = Number(process.env.THROTTLE_LIMIT) || 10;
 const THROTTLE_TTL = Number(process.env.THROTTLE_TTL) || 60000;
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: THROTTLE_LIMIT, ttl: THROTTLE_TTL } })
@@ -50,7 +47,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax',
+      sameSite: 'strict',
     });
 
     return { access_token: tokens.access_token };
@@ -73,7 +70,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax',
+      sameSite: 'strict',
     });
 
     return { access_token: tokens.access_token };

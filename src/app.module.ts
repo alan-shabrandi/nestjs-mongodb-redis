@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { ClassSerializerInterceptor, Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
@@ -18,7 +18,7 @@ import throttlerConfig from './config/throttler.config';
 import authConfig from './config/auth.config';
 import { AppConfigService } from './config/app-config.service';
 import { NotificationModule } from './notification/notifications.module';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -71,6 +71,7 @@ import { APP_GUARD } from '@nestjs/core';
     AppService,
     AppConfigService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: ClassSerializerInterceptor },
   ],
   exports: [AppConfigService],
 })
