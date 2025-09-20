@@ -3,13 +3,13 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from 'src/users/users.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import type { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { UserDocument } from 'src/users/schemas/user.schema';
+import type { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
+import { UserDocument } from 'src/users/schemas/user.schema';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { Types } from 'mongoose';
-import { JwtPayload } from './jwt.strategy';
+import { AppLogger } from 'src/common/logger/logger.service';
 
 interface LoginPayload {
   sub: string;
@@ -29,8 +29,9 @@ export class AuthService {
     private readonly jwtService: JwtService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly configService: ConfigService,
+    private readonly logger: AppLogger,
   ) {
-    const authConfig = this.configService.get('auth');
+    const authConfig = configService.get('auth');
     this.accessSecret = authConfig.jwtAccessSecret;
     this.refreshSecret = authConfig.jwtRefreshSecret;
     this.accessTokenExpiresIn = authConfig.jwtAccessExpiresIn;
@@ -40,31 +41,28 @@ export class AuthService {
 
   // ------------------- Validate user -------------------
   async validateUser(email: string, password: string): Promise<UserDocument> {
-    const key = `login_attempts:${email}`;
-    const attempts = (await this.cacheManager.get<number>(key)) || 0;
-
-    if (attempts >= 5) {
-      throw new UnauthorizedException('Too many login attempts. Try later.');
-    }
-
     const user = await this.usersService.findByEmail(email);
     if (!user) {
-      await this.cacheManager.set(key, attempts + 1, 15 * 60);
-      throw new UnauthorizedException('Invalid email or password');
+      this.logger.warnJson('Invalid login attempt', 'AuthService', { email });
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      await this.cacheManager.set(key, attempts + 1, 15 * 60);
-      throw new UnauthorizedException('Invalid email or password');
+      this.logger.warnJson('Invalid password attempt', 'AuthService', {
+        email,
+      });
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    await this.cacheManager.del(key);
+    this.logger.infoJson('User validated successfully', 'AuthService', {
+      email,
+    });
     return user;
   }
 
   // ------------------- Login -------------------
-  async login(user: UserDocument): Promise<TokenResponseDto> {
+  async login(user: UserDocument, deviceId: string): Promise<TokenResponseDto> {
     const payload: LoginPayload = {
       sub: (user._id as Types.ObjectId).toString(),
       email: user.email,
@@ -82,10 +80,15 @@ export class AuthService {
 
     const hashed = this.hashToken(refresh_token);
     await this.cacheManager.set(
-      `refresh_${payload.sub}`,
+      `refresh_${payload.sub}_${deviceId}`,
       hashed,
       this.refreshTokenCacheTtl,
     );
+
+    this.logger.infoJson('User login', 'AuthService', {
+      userId: payload.sub,
+      deviceId,
+    });
 
     return { access_token, refresh_token };
   }
@@ -94,36 +97,51 @@ export class AuthService {
   async refresh(
     userId: string,
     refreshToken: string,
+    deviceId: string,
   ): Promise<TokenResponseDto> {
-    const storedHash = await this.cacheManager.get<string>(`refresh_${userId}`);
+    const key = `refresh_${userId}_${deviceId}`;
+    const storedHash = await this.cacheManager.get<string>(key);
+
     if (!storedHash || storedHash !== this.hashToken(refreshToken)) {
+      this.logger.errorJson(
+        'Refresh token verification failed',
+        'AuthService',
+        { userId, deviceId },
+      );
       throw new UnauthorizedException('Invalid refresh token');
     }
 
     const payload: LoginPayload = { sub: userId };
-
     const newAccessToken = this.jwtService.sign(payload, {
       secret: this.accessSecret,
       expiresIn: this.accessTokenExpiresIn,
     });
-
     const newRefreshToken = this.jwtService.sign(payload, {
       secret: this.refreshSecret,
       expiresIn: this.refreshTokenExpiresIn,
     });
 
     await this.cacheManager.set(
-      `refresh_${userId}`,
+      key,
       this.hashToken(newRefreshToken),
       this.refreshTokenCacheTtl,
     );
+
+    this.logger.infoJson('Refresh token rotated', 'AuthService', {
+      userId,
+      deviceId,
+    });
 
     return { access_token: newAccessToken, refresh_token: newRefreshToken };
   }
 
   // ------------------- Logout -------------------
-  async logout(userId: string): Promise<void> {
-    await this.cacheManager.del(`refresh_${userId}`);
+  async logout(userId: string, deviceId: string): Promise<void> {
+    await this.cacheManager.del(`refresh_${userId}_${deviceId}`);
+    this.logger.infoJson('User logged out', 'AuthService', {
+      userId,
+      deviceId,
+    });
   }
 
   // ------------------- Helpers -------------------
@@ -131,12 +149,13 @@ export class AuthService {
     return crypto.createHash('sha256').update(token).digest('hex');
   }
 
-  verifyRefreshToken(token: string): JwtPayload {
+  verifyRefreshToken(token: string): LoginPayload {
     try {
-      return this.jwtService.verify<JwtPayload>(token, {
+      return this.jwtService.verify<LoginPayload>(token, {
         secret: this.refreshSecret,
       });
     } catch {
+      this.logger.warnJson('Refresh token verification failed', 'AuthService');
       throw new UnauthorizedException('Invalid refresh token');
     }
   }

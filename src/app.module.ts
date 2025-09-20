@@ -19,6 +19,7 @@ import authConfig from './config/auth.config';
 import { AppConfigService } from './config/app-config.service';
 import { NotificationModule } from './notification/notifications.module';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { LoggerModule } from './common/logger/logger.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
     AuthModule,
     PostsModule,
     NotificationModule,
+    LoggerModule,
   ],
   controllers: [AppController],
   providers: [
