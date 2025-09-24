@@ -6,37 +6,22 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from './schemas/user.schema';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { AppConfigService } from 'src/config/app-config.service';
+import { CreateContactDto } from './dto/create-contact.dto';
+import { Contact, ContactDocument } from './schemas/contact.schema';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Contact.name) private contactModel: Model<ContactDocument>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly appConfigService: AppConfigService,
   ) {}
-
-  // --- Create user ---
-  async createUser(
-    name: string,
-    email: string,
-    password: string,
-  ): Promise<User> {
-    const existingUser = await this.findByEmail(email);
-    if (existingUser) throw new BadRequestException('Email already exist');
-
-    const hashedPassword = await this.hashPassword(password);
-    const newUser = new this.userModel({
-      name,
-      email,
-      password: hashedPassword,
-    });
-    return newUser.save();
-  }
 
   // --- Find by email ---
   async findByEmail(email: string): Promise<UserDocument | null> {
@@ -106,8 +91,42 @@ export class UsersService {
     return user;
   }
 
+  // --- Get contacts ---
+  async getContacts(userId: string) {
+    const user = await this.userModel
+      .findById(userId)
+      .populate({ path: 'contacts', select: 'name email' })
+      .lean();
+
+    if (!user) throw new NotFoundException(`User with ID ${userId} not found`);
+
+    return user.contacts.map((contact) => ({
+      ...contact,
+      _id: contact._id.toString(),
+    }));
+  }
+
+  // --- Add contact ---
+  async addContact(userId: string, dto: CreateContactDto) {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException(`User with ID ${userId} not found`);
+
+    const emailExist = await this.userModel
+      .findOne({ email: dto.email })
+      .exec();
+    if (!emailExist) throw new NotFoundException(`This email not found`);
+
+    const contact = new this.contactModel({
+      ...dto,
+      owner: new Types.ObjectId(userId),
+    });
+    await contact.save();
+    user.contacts.push(contact._id as Types.ObjectId);
+    return (await user.save()).toObject();
+  }
+
   // --- Utility: hash password ---
-  private async hashPassword(password: string): Promise<string> {
+  async hashPassword(password: string): Promise<string> {
     const salt = await bcrypt.genSalt(10);
     return bcrypt.hash(password, salt);
   }

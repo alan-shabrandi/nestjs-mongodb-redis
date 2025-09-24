@@ -20,6 +20,7 @@ import { AppConfigService } from './config/app-config.service';
 import { NotificationModule } from './notification/notifications.module';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { LoggerModule } from './common/logger/logger.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { LoggerModule } from './common/logger/logger.module';
     PostsModule,
     NotificationModule,
     LoggerModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [

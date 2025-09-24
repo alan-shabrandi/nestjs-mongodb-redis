@@ -34,7 +34,7 @@ export class AppConfigService {
   }
 
   get throttleLimit(): number {
-    return this.configService.get<number>('throttler.limit', 10);
+    return this.configService.get<number>('throttler.limit', 1000);
   }
 
   // --- Auth ---

@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User, UserRole } from './schemas/user.schema';
-import { CreateUserDto } from './dto/create-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesOwnerGuard } from 'src/common/guards/roles-owner.guard';
@@ -28,6 +27,7 @@ import { UserDto } from './dto/user.dto';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { plainToInstance } from 'class-transformer';
+import { CreateContactDto } from './dto/create-contact.dto';
 
 const THROTTLE_LIMIT = Number(process.env.THROTTLE_LIMIT) || 3;
 const THROTTLE_TTL = Number(process.env.THROTTLE_TTL) || 60;
@@ -39,18 +39,6 @@ const PASSWORD_THROTTLE_TTL = Number(process.env.PASSWORD_THROTTLE_TTL) || 60;
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
-
-  @Post()
-  @ApiOperation({ summary: 'Create a new user' })
-  @ApiResponse({ status: 201, description: 'User created', type: UserDto })
-  @ApiBody({ type: CreateUserDto })
-  async create(@Body() createUserDto: CreateUserDto): Promise<User> {
-    return this.usersService.createUser(
-      createUserDto.name,
-      createUserDto.email,
-      createUserDto.password,
-    );
-  }
 
   @UseGuards(AuthGuard('jwt'))
   @Get('me')
@@ -112,5 +100,30 @@ export class UsersController {
       dto.oldPassword,
       dto.newPassword,
     );
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get(':id/contacts')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user contacts' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of contacts',
+    type: [UserDto],
+  })
+  async getContacts(@Param('id') id: string) {
+    return this.usersService.getContacts(id);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/contacts')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add new contact for user' })
+  @ApiParam({ name: 'id', description: 'User ID' })
+  @ApiBody({ type: CreateContactDto })
+  @ApiResponse({ status: 201, description: 'Contact added successfully' })
+  async addContact(@Param('id') id: string, @Body() dto: CreateContactDto) {
+    return this.usersService.addContact(id, dto);
   }
 }

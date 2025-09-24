@@ -5,9 +5,11 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from './schemas/user.schema';
 import { CacheModule } from '@nestjs/cache-manager';
 import { AppConfigService } from 'src/config/app-config.service';
+import { Contact, ContactSchema } from './schemas/contact.schema';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([{ name: Contact.name, schema: ContactSchema }]),
     CacheModule.register(),
   ],
   controllers: [UsersController],
